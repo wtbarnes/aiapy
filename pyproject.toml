@@ -42,7 +42,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
-  'sunpy[net,image,map]>=5.0',
+  'sunpy[net,image,map]==5.1.0rc1',
 ]
 
 [project.urls]
