@@ -7,7 +7,6 @@ import astropy.time
 import astropy.units as u
 from astropy.io.fits.verify import VerifyWarning
 
-import sunpy.data.test
 from sunpy.map import Map
 
 from aiapy.calibrate import correct_degradation, degradation, register
@@ -21,24 +20,37 @@ def lvl_15_map(aia_171_map):
     return register(aia_171_map)
 
 
-@pytest.fixture
-def non_sdo_map():
-    return Map(sunpy.data.test.get_test_filepath("hsi_image_20101016_191218.fits"))
-
-
 def test_register(lvl_15_map) -> None:
     """
     Test that header info for the map has been correctly updated after the map
     has been scaled to 0.6 arcsec / pixel and aligned with solar north.
     """
-    # TODO: Check all of these for Map attributes and .meta values?
     np.testing.assert_array_equal(lvl_15_map.data.shape, detector_dimensions().value)
     assert lvl_15_map.meta["crpix1"] == lvl_15_map.data.shape[0] / 2 + 0.5
     assert lvl_15_map.meta["crpix2"] == lvl_15_map.data.shape[1] / 2 + 0.5
+    assert lvl_15_map.meta["r_sun"] == lvl_15_map.meta["rsun_obs"] / lvl_15_map.meta["cdelt1"]
     assert lvl_15_map.meta["cdelt1"] / 0.6 == int(lvl_15_map.meta["cdelt1"] / 0.6) == 1
     assert lvl_15_map.meta["cdelt2"] / 0.6 == int(lvl_15_map.meta["cdelt2"] / 0.6) == 1
     np.testing.assert_allclose(lvl_15_map.rotation_matrix, np.identity(2))
     assert lvl_15_map.meta["lvl_num"] == 1.5
+    assert lvl_15_map.meta["bitpix"] == -64
+
+
+def test_register_submap(aia_171_submap) -> None:
+    """
+    Test that we can register a submap and that the output has the same shape
+    as the input submap and is correctly aligned.
+    """
+    lvl_15_submap = register(aia_171_submap)
+    np.testing.assert_array_equal(lvl_15_submap.data.shape, aia_171_submap.data.shape)
+    assert lvl_15_submap.meta["crpix1"] == lvl_15_submap.data.shape[0] / 2 + 0.5
+    assert lvl_15_submap.meta["crpix2"] == lvl_15_submap.data.shape[1] / 2 + 0.5
+    assert lvl_15_submap.meta["r_sun"] == lvl_15_submap.meta["rsun_obs"] / lvl_15_submap.meta["cdelt1"]
+    assert lvl_15_submap.meta["cdelt1"] / 0.6 == int(lvl_15_submap.meta["cdelt1"] / 0.6) == 1
+    assert lvl_15_submap.meta["cdelt2"] / 0.6 == int(lvl_15_submap.meta["cdelt2"] / 0.6) == 1
+    np.testing.assert_allclose(lvl_15_submap.rotation_matrix, np.identity(2))
+    assert lvl_15_submap.meta["lvl_num"] == 1.5
+    assert lvl_15_submap.meta["bitpix"] == -64
 
 
 def test_register_filesave(lvl_15_map, tmp_path) -> None:
@@ -50,23 +62,15 @@ def test_register_filesave(lvl_15_map, tmp_path) -> None:
     with pytest.warns(VerifyWarning, match="The 'BLANK' keyword is only applicable to integer data"):
         lvl_15_map.save(str(filename), overwrite=True)
     load_map = Map(str(filename))
-    assert load_map.meta["crpix1"] == lvl_15_map.data.shape[1] / 2 + 0.5
-    assert load_map.meta["crpix2"] == lvl_15_map.data.shape[0] / 2 + 0.5
-    assert load_map.meta["cdelt1"] / 0.6 == int(load_map.meta["cdelt1"] / 0.6)
-    assert load_map.meta["cdelt2"] / 0.6 == int(load_map.meta["cdelt2"] / 0.6)
-    np.testing.assert_allclose(lvl_15_map.rotation_matrix, np.identity(2))
+    np.testing.assert_array_equal(lvl_15_map.data.shape, detector_dimensions().value)
+    assert load_map.meta["crpix1"] == load_map.data.shape[0] / 2 + 0.5
+    assert load_map.meta["crpix2"] == load_map.data.shape[1] / 2 + 0.5
+    assert load_map.meta["r_sun"] == load_map.meta["rsun_obs"] / load_map.meta["cdelt1"]
+    assert load_map.meta["cdelt1"] / 0.6 == int(load_map.meta["cdelt1"] / 0.6) == 1
+    assert load_map.meta["cdelt2"] / 0.6 == int(load_map.meta["cdelt2"] / 0.6) == 1
+    np.testing.assert_allclose(load_map.rotation_matrix, np.identity(2))
     assert load_map.meta["lvl_num"] == 1.5
-
-
-def test_register_unsupported_maps(aia_171_map, non_sdo_map) -> None:
-    """
-    Make sure we raise an error when an unsupported map is passed in.
-    """
-    original_cutout = aia_171_map.submap(aia_171_map.center, top_right=aia_171_map.top_right_coord)
-    with pytest.raises(ValueError, match=r"Input must be a full disk image."):
-        register(original_cutout)
-    with pytest.raises(TypeError, match="Input is not an AIAMap or an HMIMap"):
-        register(non_sdo_map)
+    assert load_map.meta["bitpix"] == -64
 
 
 def test_register_level_15(lvl_15_map) -> None:

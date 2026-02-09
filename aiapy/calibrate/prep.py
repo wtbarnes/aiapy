@@ -3,6 +3,7 @@ Functions for calibrating AIA images.
 """
 
 import copy
+import logging
 import warnings
 
 import numpy as np
@@ -10,13 +11,10 @@ import numpy as np
 import astropy.units as u
 import astropy.wcs
 from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import pixel_to_pixel
 
-from sunpy.map import contains_full_disk
 from sunpy.map.header_helper import make_fitswcs_header
-from sunpy.map.sources.sdo import AIAMap, HMIMap
-from sunpy.util.decorators import add_common_docstring
 
-from aiapy.calibrate.transform import _rotation_function_names
 from aiapy.calibrate.utils import _select_epoch_from_correction_table, get_correction_table
 from aiapy.utils import detector_dimensions
 from aiapy.utils.decorators import validate_channel
@@ -25,7 +23,6 @@ from aiapy.utils.exceptions import AIApyUserWarning
 __all__ = ["correct_degradation", "degradation", "register"]
 
 
-@add_common_docstring(rotation_function_names=_rotation_function_names)
 def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
     """
     Rotates, scales and translates the image so that solar North is aligned
@@ -60,11 +57,6 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
         A promoted copy of `~sunpy.map.sources.AIAMap` or
         `~sunpy.map.sources.sdo.HMIMap`.
     """
-    if not isinstance(smap, (AIAMap, HMIMap)):
-        warnings.warn("Input is not an AIAMap or an HMIMap", TypeError, stacklevel=2)
-    if not contains_full_disk(smap):
-        msg = "Input must be a full disk image."
-        raise ValueError(msg) from None
     if smap.processing_level is None or smap.processing_level > 1:
         warnings.warn(
             "Image registration should only be applied to level 1 data",
@@ -86,16 +78,35 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
         rotation_matrix=np.eye(2),
     )
     wcs_l15_full_disk = astropy.wcs.WCS(header_l15_full_disk, preserve_units=True)
-    # Use the full-frame WCS directly so disk center is at image center
+    # Find the bottom left corner of the map in the full-frame WCS
+    blc_full_disk = pixel_to_pixel(smap.wcs, wcs_l15_full_disk, 0, 0) * u.pix
+    # Calculate distance between full-frame center and bottom left corner
+    # This is the location of disk center in the aligned WCS of this map
+    ref_pixel = ref_pixel_full_disk - blc_full_disk
+    # Construct the L1.5 WCS for this map and reproject
+    wcs_l15 = astropy.wcs.WCS(
+        make_fitswcs_header(
+            smap.data.shape,
+            ref_coord,
+            reference_pixel=ref_pixel,
+            scale=scale,
+            rotation_matrix=np.eye(2),
+        ),
+        preserve_units=True,
+    )
     kwargs["return_footprint"] = kwargs.get("return_footprint", False)
     # This was selected as the fastest method in local testing
     kwargs["parallel"] = kwargs.get("parallel", True)
     kwargs["block_size"] = kwargs.get("block_size", (1024, 1024))
-    smap_l15 = smap.reproject_to(wcs_l15_full_disk, algorithm=algorithm, **kwargs)
+    # We just wanat to suppress the reproject INFO logging
+    # TODO: Make this configurable by the user?
+    logger = logging.getLogger("reproject.common")
+    logger.setLevel(level=logging.WARNING)
+    smap_l15 = smap.reproject_to(wcs_l15, algorithm=algorithm, **kwargs)
     # Fill in missing values
     data = smap_l15.data
-    missing = smap.data.min() if missing is None else missing
-    data[np.where(np.isnan(data))] = missing
+    missing = np.nanmin(smap_l15.data) if missing is None else missing
+    data[np.isnan(data)] = missing
     # Restore metadata (reproject_to only carries over the WCS keywords)
     new_meta = copy.deepcopy(smap.meta)
     # CROTA2 conflicts with the new diagonalized PCi_j

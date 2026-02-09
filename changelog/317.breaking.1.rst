@@ -1,0 +1,1 @@
+Removed the need for cupy from aiapy.
