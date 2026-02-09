@@ -77,7 +77,7 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
         scale=scale,
         rotation_matrix=np.eye(2),
     )
-    wcs_l15_full_disk = astropy.wcs.WCS(header_l15_full_disk, preserve_units=True)
+    wcs_l15_full_disk = astropy.wcs.WCS(header_l15_full_disk)
     # Find the bottom left corner of the map in the full-frame WCS
     blc_full_disk = pixel_to_pixel(smap.wcs, wcs_l15_full_disk, 0, 0) * u.pix
     # Calculate distance between full-frame center and bottom left corner
@@ -92,13 +92,12 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
             scale=scale,
             rotation_matrix=np.eye(2),
         ),
-        preserve_units=True,
     )
     kwargs["return_footprint"] = kwargs.get("return_footprint", False)
     # This was selected as the fastest method in local testing
     kwargs["parallel"] = kwargs.get("parallel", True)
     kwargs["block_size"] = kwargs.get("block_size", (1024, 1024))
-    # We just wanat to suppress the reproject INFO logging
+    # Suppress the reproject INFO logging
     # TODO: Make this configurable by the user?
     logger = logging.getLogger("reproject.common")
     logger.setLevel(level=logging.WARNING)
