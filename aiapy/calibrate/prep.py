@@ -3,7 +3,6 @@ Functions for calibrating AIA images.
 """
 
 import copy
-import logging
 import warnings
 
 import numpy as np
@@ -94,13 +93,10 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
         ),
     )
     kwargs["return_footprint"] = kwargs.get("return_footprint", False)
-    # This was selected as the fastest method in local testing
     kwargs["parallel"] = kwargs.get("parallel", True)
-    kwargs["block_size"] = kwargs.get("block_size", (1024, 1024))
-    # Suppress the reproject INFO logging
-    # TODO: Make this configurable by the user?
-    logger = logging.getLogger("reproject.common")
-    logger.setLevel(level=logging.WARNING)
+    # We only set the block size for full disk images to speed up re-projection
+    block_size = (1024, 1024) if smap.data.shape == detector_dimensions() else smap.data.shape
+    kwargs["block_size"] = kwargs.get("block_size", block_size)
     smap_l15 = smap.reproject_to(wcs_l15, algorithm=algorithm, **kwargs)
     # Fill in missing values
     data = smap_l15.data
