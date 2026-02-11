@@ -26,11 +26,8 @@ def test_register(lvl_15_map) -> None:
     has been scaled to 0.6 arcsec / pixel and aligned with solar north.
     """
     np.testing.assert_array_equal(lvl_15_map.data.shape, detector_dimensions().value)
-    assert lvl_15_map.meta["crpix1"] == lvl_15_map.data.shape[0] / 2 + 0.5
-    assert lvl_15_map.meta["crpix2"] == lvl_15_map.data.shape[1] / 2 + 0.5
-    assert lvl_15_map.meta["r_sun"] == lvl_15_map.meta["rsun_obs"] / lvl_15_map.meta["cdelt1"]
-    assert lvl_15_map.meta["cdelt1"] / 0.6 == int(lvl_15_map.meta["cdelt1"] / 0.6) == 1
-    assert lvl_15_map.meta["cdelt2"] / 0.6 == int(lvl_15_map.meta["cdelt2"] / 0.6) == 1
+    assert u.allclose(u.Quantity(lvl_15_map.reference_pixel), (u.Quantity(lvl_15_map.dimensions) - 1 * u.pix) / 2)
+    assert u.allclose(lvl_15_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
     np.testing.assert_allclose(lvl_15_map.rotation_matrix, np.identity(2))
     assert lvl_15_map.meta["lvl_num"] == 1.5
     assert lvl_15_map.meta["bitpix"] == -64
@@ -38,19 +35,25 @@ def test_register(lvl_15_map) -> None:
 
 def test_register_submap(aia_171_submap) -> None:
     """
-    Test that we can register a submap and that the output has the same shape
-    as the input submap and is correctly aligned.
+    Test that submap and register are commutative
     """
-    lvl_15_submap = register(aia_171_submap)
-    np.testing.assert_array_equal(lvl_15_submap.data.shape, aia_171_submap.data.shape)
-    assert lvl_15_submap.meta["crpix1"] == lvl_15_submap.data.shape[0] / 2 + 0.5
-    assert lvl_15_submap.meta["crpix2"] == lvl_15_submap.data.shape[1] / 2 + 0.5
-    assert lvl_15_submap.meta["r_sun"] == lvl_15_submap.meta["rsun_obs"] / lvl_15_submap.meta["cdelt1"]
-    assert lvl_15_submap.meta["cdelt1"] / 0.6 == int(lvl_15_submap.meta["cdelt1"] / 0.6) == 1
-    assert lvl_15_submap.meta["cdelt2"] / 0.6 == int(lvl_15_submap.meta["cdelt2"] / 0.6) == 1
-    np.testing.assert_allclose(lvl_15_submap.rotation_matrix, np.identity(2))
-    assert lvl_15_submap.meta["lvl_num"] == 1.5
-    assert lvl_15_submap.meta["bitpix"] == -64
+    submap_lvl_15 = register(aia_171_submap)
+    np.testing.assert_array_equal(submap_lvl_15.data.shape, aia_171_submap.data.shape)
+    assert u.allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(aia_171_submap.reference_pixel))
+    assert u.allclose(submap_lvl_15.scale, [0.6, 0.6] * u.arcsec / u.pixel)
+    np.testing.assert_allclose(submap_lvl_15.rotation_matrix, np.identity(2))
+    assert submap_lvl_15.meta["lvl_num"] == 1.5
+    assert submap_lvl_15.meta["bitpix"] == -64
+
+
+def test_register_submap_commutative(lvl_15_map, aia_171_submap) -> None:
+    """
+    Test that submap and register are commutative
+    """
+    submap_lvl_15 = register(aia_171_submap)
+    lvl_15_submap = lvl_15_map.submap(aia_171_submap.bottom_left_coord, top_right=aia_171_submap.top_right_coord)
+    assert u.allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(lvl_15_submap.reference_pixel))
+    assert submap_lvl_15.data.shape == lvl_15_submap.data.shape
 
 
 def test_register_filesave(lvl_15_map, tmp_path) -> None:
@@ -62,12 +65,10 @@ def test_register_filesave(lvl_15_map, tmp_path) -> None:
     with pytest.warns(VerifyWarning, match="The 'BLANK' keyword is only applicable to integer data"):
         lvl_15_map.save(str(filename), overwrite=True)
     load_map = Map(str(filename))
-    np.testing.assert_array_equal(lvl_15_map.data.shape, detector_dimensions().value)
-    assert load_map.meta["crpix1"] == load_map.data.shape[0] / 2 + 0.5
-    assert load_map.meta["crpix2"] == load_map.data.shape[1] / 2 + 0.5
-    assert load_map.meta["r_sun"] == load_map.meta["rsun_obs"] / load_map.meta["cdelt1"]
-    assert load_map.meta["cdelt1"] / 0.6 == int(load_map.meta["cdelt1"] / 0.6) == 1
-    assert load_map.meta["cdelt2"] / 0.6 == int(load_map.meta["cdelt2"] / 0.6) == 1
+    np.testing.assert_array_equal(load_map.data.shape, detector_dimensions().value)
+    assert u.allclose(u.Quantity(load_map.reference_pixel), (u.Quantity(load_map.dimensions) - 1 * u.pix) / 2)
+    assert u.allclose(load_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
+    np.testing.assert_allclose(load_map.rotation_matrix, np.identity(2))
     np.testing.assert_allclose(load_map.rotation_matrix, np.identity(2))
     assert load_map.meta["lvl_num"] == 1.5
     assert load_map.meta["bitpix"] == -64

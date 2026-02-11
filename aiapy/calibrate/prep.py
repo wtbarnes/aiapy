@@ -10,7 +10,6 @@ import numpy as np
 import astropy.units as u
 import astropy.wcs
 from astropy.coordinates import SkyCoord
-from astropy.wcs.utils import pixel_to_pixel
 
 from sunpy.map.header_helper import make_fitswcs_header
 
@@ -65,33 +64,25 @@ def register(smap, *, missing=None, algorithm="interpolation", **kwargs):
     # The output WCS is defined in terms of the full-frame image such that
     # the center of the Sun lies at the center of the pixel array.
     shape_full_disk = detector_dimensions()
-    ref_pixel_full_disk = (shape_full_disk - 1 * u.pix) / 2
+    if (u.Quantity(smap.dimensions) == shape_full_disk).all():
+        ref_pixel = (shape_full_disk - 1 * u.pix) / 2
+    else:
+        # In the case of submaps, an ideal choice of reference pixel is
+        # ambiguous so we use the reference pixel of the original map.
+        # NOTE: Should a warning be issued that image center != sun center
+        # in this case?
+        ref_pixel = u.Quantity(smap.reference_pixel)
     ref_coord = SkyCoord(0, 0, unit="arcsec", frame=smap.coordinate_frame)
     scale = [0.6, 0.6] * u.arcsec / u.pixel
     # First, construct the full-frame WCS
     header_l15_full_disk = make_fitswcs_header(
-        tuple(shape_full_disk.value),
+        smap.data.shape,
         ref_coord,
-        reference_pixel=ref_pixel_full_disk,
+        reference_pixel=ref_pixel,
         scale=scale,
         rotation_matrix=np.eye(2),
     )
-    wcs_l15_full_disk = astropy.wcs.WCS(header_l15_full_disk)
-    # Find the bottom left corner of the map in the full-frame WCS
-    blc_full_disk = pixel_to_pixel(smap.wcs, wcs_l15_full_disk, 0, 0) * u.pix
-    # Calculate distance between full-frame center and bottom left corner
-    # This is the location of disk center in the aligned WCS of this map
-    ref_pixel = ref_pixel_full_disk - blc_full_disk
-    # Construct the L1.5 WCS for this map and reproject
-    wcs_l15 = astropy.wcs.WCS(
-        make_fitswcs_header(
-            smap.data.shape,
-            ref_coord,
-            reference_pixel=ref_pixel,
-            scale=scale,
-            rotation_matrix=np.eye(2),
-        ),
-    )
+    wcs_l15 = astropy.wcs.WCS(header_l15_full_disk)
     kwargs["return_footprint"] = kwargs.get("return_footprint", False)
     kwargs["parallel"] = kwargs.get("parallel", True)
     # We only set the block size for full disk images to speed up re-projection
