@@ -6,6 +6,7 @@ import pytest
 import astropy.time
 import astropy.units as u
 from astropy.io.fits.verify import VerifyWarning
+from astropy.tests.helper import assert_quantity_allclose
 
 from sunpy.map import Map
 
@@ -26,8 +27,10 @@ def test_register(lvl_15_map) -> None:
     has been scaled to 0.6 arcsec / pixel and aligned with solar north.
     """
     np.testing.assert_array_equal(lvl_15_map.data.shape, detector_dimensions().value)
-    assert u.allclose(u.Quantity(lvl_15_map.reference_pixel), (u.Quantity(lvl_15_map.dimensions) - 1 * u.pix) / 2)
-    assert u.allclose(lvl_15_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
+    assert_quantity_allclose(
+        u.Quantity(lvl_15_map.reference_pixel), (u.Quantity(lvl_15_map.dimensions) - 1 * u.pix) / 2
+    )
+    assert_quantity_allclose(lvl_15_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
     np.testing.assert_allclose(lvl_15_map.rotation_matrix, np.identity(2))
     assert lvl_15_map.meta["lvl_num"] == 1.5
     assert lvl_15_map.meta["bitpix"] == -64
@@ -39,8 +42,8 @@ def test_register_submap(aia_171_submap) -> None:
     """
     submap_lvl_15 = register(aia_171_submap)
     np.testing.assert_array_equal(submap_lvl_15.data.shape, aia_171_submap.data.shape)
-    assert u.allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(aia_171_submap.reference_pixel))
-    assert u.allclose(submap_lvl_15.scale, [0.6, 0.6] * u.arcsec / u.pixel)
+    assert_quantity_allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(aia_171_submap.reference_pixel))
+    assert_quantity_allclose(submap_lvl_15.scale, [0.6, 0.6] * u.arcsec / u.pixel)
     np.testing.assert_allclose(submap_lvl_15.rotation_matrix, np.identity(2))
     assert submap_lvl_15.meta["lvl_num"] == 1.5
     assert submap_lvl_15.meta["bitpix"] == -64
@@ -52,7 +55,7 @@ def test_register_submap_commutative(lvl_15_map, aia_171_submap) -> None:
     """
     submap_lvl_15 = register(aia_171_submap)
     lvl_15_submap = lvl_15_map.submap(aia_171_submap.bottom_left_coord, top_right=aia_171_submap.top_right_coord)
-    assert u.allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(lvl_15_submap.reference_pixel))
+    assert_quantity_allclose(u.Quantity(submap_lvl_15.reference_pixel), u.Quantity(lvl_15_submap.reference_pixel))
     assert submap_lvl_15.data.shape == lvl_15_submap.data.shape
 
 
@@ -66,8 +69,8 @@ def test_register_filesave(lvl_15_map, tmp_path) -> None:
         lvl_15_map.save(str(filename), overwrite=True)
     load_map = Map(str(filename))
     np.testing.assert_array_equal(load_map.data.shape, detector_dimensions().value)
-    assert u.allclose(u.Quantity(load_map.reference_pixel), (u.Quantity(load_map.dimensions) - 1 * u.pix) / 2)
-    assert u.allclose(load_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
+    assert_quantity_allclose(u.Quantity(load_map.reference_pixel), (u.Quantity(load_map.dimensions) - 1 * u.pix) / 2)
+    assert_quantity_allclose(load_map.scale, [0.6, 0.6] * u.arcsec / u.pixel)
     np.testing.assert_allclose(load_map.rotation_matrix, np.identity(2))
     np.testing.assert_allclose(load_map.rotation_matrix, np.identity(2))
     assert load_map.meta["lvl_num"] == 1.5
@@ -151,7 +154,7 @@ def test_degradation(source, time_correction_truth) -> None:
         obstime,
         correction_table=correction_table,
     )
-    assert u.allclose(time_correction, time_correction_truth, atol=1e-3)
+    assert_quantity_allclose(time_correction, time_correction_truth, atol=1e-3)
 
 
 @pytest.mark.parametrize(
@@ -206,7 +209,7 @@ def test_degradation_all_wavelengths(wavelength, result) -> None:
         obstime,
         correction_table=get_correction_table("SSW"),
     )
-    assert u.allclose(time_correction, result, atol=1e-3)
+    assert_quantity_allclose(time_correction, result, atol=1e-3)
 
 
 @pytest.mark.remote_data
@@ -226,7 +229,7 @@ def test_degradation_4500_jsoc() -> None:
     # and it is missing from the SSW files but not the JSOC
     obstime = astropy.time.Time("2015-01-01T00:00:00", scale="utc")
     correction = degradation(4500 * u.angstrom, obstime, correction_table=get_correction_table("jsoc"))
-    assert u.allclose(correction, 1.0 * u.dimensionless_unscaled)
+    assert_quantity_allclose(correction, 1.0 * u.dimensionless_unscaled)
 
 
 def test_degradation_time_array() -> None:
