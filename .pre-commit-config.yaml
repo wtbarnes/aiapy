@@ -46,6 +46,15 @@ repos:
         args: ["--enforce-all", "--maxkb=1054"]
       - id: end-of-file-fixer
       - id: mixed-line-ending
+<<<<<<<
+=======
+        types_or: [python, rst]
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.2
+    hooks:
+      - id: codespell
+        args: [ "--write-changes" ]
+>>>>>>>
   # See https://github.com/python-trio/trio/pull/3255
   -   repo: https://github.com/adhtruong/mirrors-typos
       rev: v1.44.0
